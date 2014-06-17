@@ -1,8 +1,8 @@
 JavaScript
 ==========
 
-***JavaScriptProjs
-**Restaurant GIS Analytics
+###JavaScriptProjs
+##Restaurant GIS Analytics
 
 Maps the potential for starting a new restaurant in Chennai based on wardwise data
 Uses drive time buffers from existing restaurants to determine competition
