@@ -1,0 +1,567 @@
+﻿
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta name="viewport" content="initial-scale=1, maximum-scale=1,user-scalable=no">
+<title>Restaurant Potential Map</title>
+<link rel="stylesheet" href="http://js.arcgis.com/3.8/js/dojo/dijit/themes/claro/claro.css">
+<link rel="stylesheet" href="http://js.arcgis.com/3.8/js/esri/css/esri.css">
+<link rel="stylesheet" href="http://js.arcgis.com/3.8/js/esri/css/layout.css">
+<style>
+html, body,
+#map{
+height: 100%;
+margin: 0;
+padding: 0;
+position: relative;
+}
+#info {
+background: #fff;
+box-shadow: 0 0 5px #888;
+right: 1em;
+padding: 0.5em;
+position: absolute;
+top: 0.5em;
+z-index: 40;
+width: 450px;
+}
+#legend_div {
+background: #fff;
+box-shadow: 0 0 5px #888;
+right: 1em;
+padding: 0.5em;
+position: absolute;
+top: 26.5em;
+width: 450px;
+z-index: 40;
+}
+#chart_div {
+background: #fff;
+box-shadow: 0 0 5px #888;
+right: 1em;
+padding: 0.5em;
+position: absolute;
+top: 10em;
+z-index: 40;
+width :450px;
+}
+#chart_space {
+width :450px;
+}
+input.icon{
+padding:0px 5px 0px 5px;
+}
+table.myTd
+{
+box-shadow: 16px 3px 10px -7px #888, -10px 0px 20px -7px #888;
+}
+</style>
+<script src="//code.jquery.com/jquery-1.9.1.js"></script>
+<script src="//code.jquery.com/ui/1.10.4/jquery-ui.js"></script>
+<script src="http://js.arcgis.com/3.8/"></script>
+<script type="text/javascript" src="https://www.google.com/jsapi"></script>
+<script>
+    var map, dialog, featureLayer, driveTimeLayer, defaultSymbol, elem, selectedWardName;
+    var selectedAffordabilitylevel = "";
+    var mapServiceURL = "http://uat.onemap.sg/arcgis/rest/services/SampleMapService/MapServer/";
+    var layerIDs = { "wardLayer": "0", "af_1": "1", "af_2": "2", "af_3": "3", "af_4": "4" }; //af_1, ..,af_4 are drive time polygons corresponding to the Affordability levels
+    var isDriveTimeLyrOpen = false;
+    google.load("visualization", "1", { packages: ["corechart"] });
+    require([
+    "esri/map",
+    "esri/layers/ArcGISTiledMapServiceLayer",
+    "esri/layers/FeatureLayer",
+    "esri/symbols/SimpleFillSymbol",
+    "esri/symbols/SimpleLineSymbol",
+    "esri/renderers/SimpleRenderer",
+    "esri/renderers/ClassBreaksRenderer",
+    "esri/graphic",
+    "esri/lang",
+    "dojo/_base/Color",
+    "dojo/number",
+    "dojo/dom-style",
+    "dijit/TooltipDialog",
+    "dijit/popup",
+    "dojo/domReady!",
+    "dijit/layout/BorderContainer",
+    "dijit/layout/ContentPane",
+    "esri/tasks/query",
+    "esri/graphicsUtils",
+    "esri/symbols/PictureMarkerSymbol",
+    ], function (
+    Map,
+    Tiled,
+    FeatureLayer,
+    SimpleFillSymbol,
+    SimpleLineSymbol,
+    SimpleRenderer,
+    ClassBreaksRenderer,
+    Graphic,
+    esriLang,
+    Color,
+    number,
+    domStyle,
+    TooltipDialog,
+    dijitPopup,
+    BorderContainer,
+    ContentPane,
+    Query,
+    graphicsUtils,
+    PictureMarkerSymbol
+    ) {
+        map = new Map("map", {
+            //basemap: "satellite",
+            center: [80.2784700, 13.075],
+            zoom: 12,
+            logo: false
+        });
+        var natGeo = new Tiled("http://services.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer");
+        map.addLayer(natGeo);
+        //Defne feature Layer
+        var wardLayerUrl = mapServiceURL + layerIDs["wardLayer"];
+        featureLayer = new FeatureLayer(wardLayerUrl, {
+            mode: FeatureLayer.MODE_SNAPSHOT,
+            outFields: ["*"]
+        });
+        //Define default symbology - Grey
+        defaultSymbol = new SimpleFillSymbol(
+        SimpleFillSymbol.STYLE_SOLID,
+        new SimpleLineSymbol(
+        SimpleLineSymbol.STYLE_DASHDOT,
+        new Color("#1F7A68"),
+        1
+        ),
+        new Color([125, 125, 125, 0.2])
+        );
+        //Initially render wards with default symbology
+        featureLayer.setRenderer(new SimpleRenderer(defaultSymbol));
+        map.addLayer(featureLayer);
+        //Define popup
+        dialog = new TooltipDialog({
+            id: "tooltipDialog",
+            style: "position: absolute; width: 250px; font: normal normal normal 10pt Helvetica;z-index:100"
+        });
+        dialog.startup();
+        //Define highlight symbol
+        var highlightSymbol = new SimpleFillSymbol(
+        SimpleFillSymbol.STYLE_SOLID,
+        new SimpleLineSymbol(
+        SimpleLineSymbol.STYLE_SOLID,
+        new Color([255, 0, 0]), 3
+        ),
+        new Color([125, 125, 125, 0.1])
+        );
+        map.on("load", function () {
+            map.graphics.enableMouseEvents();
+        });
+        //On mouse over a feature, creates a popup and uses higlight graphic
+        featureLayer.on("click", function (evt) {
+            closeDialog();
+            var attr = evt.graphic.attributes;
+            selectedWardName = attr.name;
+            document.getElementById('txtWards').value = selectedWardName;
+            var t = "<b>Potential for ${name}</b><hr><b>Low Cost: </b>" + parseInt(attr.af_1) + "%<br>"
+            + "<b>Merate Cost: </b>" + parseInt(attr.af_2) + "%<br>"
+            + "<b>High Cost: </b>" + parseInt(attr.af_3) + "%<br>"
+            + "<b>Exquisite: </b>" + parseInt(attr.af_4) + "%<br>";
+            createChart(selectedWardName, attr.af_1, attr.af_2, attr.af_3, attr.af_4);
+            var content = esriLang.substitute(evt.graphic.attributes, t);
+            var highlightGraphic = new Graphic(evt.graphic.geometry, highlightSymbol);
+            map.graphics.add(highlightGraphic);
+            dialog.setContent(content);
+            domStyle.set(dialog.domNode, "opacity", 0.85);
+            dijitPopup.open({
+                popup: dialog,
+                x: evt.pageX,
+                y: evt.pageY
+            });
+        });
+        function createChart(selectedWardName, potential_1, potential_2, potential_3, potential_4) {
+            var data = google.visualization.arrayToDataTable([
+            ['Affordability Level', 'Potential', { role: 'style' }, { role: 'annotation' }],
+            ['Low', parseFloat(potential_1), getColor(parseInt(potential_1)), getAnnotation(parseInt(potential_1))],
+            ['Moderate', parseFloat(potential_2), getColor(parseInt(potential_2)), getAnnotation(parseInt(potential_2))],
+            ['High', parseFloat(potential_3), getColor(parseInt(potential_3)), getAnnotation(parseInt(potential_3))],
+            ['Exquisite', parseFloat(potential_4), getColor(parseInt(potential_4)), getAnnotation(parseInt(potential_4))]
+            ]);
+            var options = {
+                title: 'Potential for new resaurant at ' + selectedWardName,
+                hAxis: { title: 'Potential', minValue: 0, maxValue: 100, titleTextStyle: { color: 'red' } },
+                vAxis: { title: 'Affordability Class', titleTextStyle: { color: 'red' } }
+            };
+            var chart = new google.visualization.BarChart(document.getElementById('chart_space'));
+            elem = document.getElementById('chart_div');
+            elem.style.display = 'block';
+            chart.draw(data, options);
+        }
+        dojo.connect(dojo.byId("btnZoom2FullExtent"), "onclick", function () { closeDialog(); map.setExtent(featureLayer.initialExtent); });
+        dojo.connect(dojo.byId("btnClose"), "onclick", closeDiv);
+        dojo.connect(dojo.byId("btnOverlaySA"), "onclick", overlayDriveTimePolygons);
+        function overlayDriveTimePolygons() {
+            var e = document.getElementById("ddlType");
+            var selectedAffordabilitylevel = e.options[e.selectedIndex].value;
+            var selectedAffordabilityDesc = e.options[e.selectedIndex].text;
+            var ward_name = document.getElementById('txtWards').value;
+            //var a = document.getElementById("txtWardName").text;
+            if (selectedAffordabilitylevel != "Select") {
+                if (ward_name != "") {
+                    closeDialog();
+                    zoomToWard(ward_name);
+                    if (driveTimeLayer) {
+                        map.removeLayer(driveTimeLayer);
+                    }
+                    isDriveTimeLyrOpen = true;
+                    var driveTimeLayerURL = mapServiceURL + layerIDs[selectedAffordabilitylevel];
+                    driveTimeLayer = new FeatureLayer(driveTimeLayerURL, {
+                        mode: FeatureLayer.MODE_ONDEMAND,
+                        outFields: ["*"]
+                    });
+                    featureLayer.setRenderer(new SimpleRenderer(defaultSymbol));
+                    map.graphics.on("click", function (e) {
+                        if (isDriveTimeLyrOpen) {
+                            var infoSymbol = new esri.symbol.PictureMarkerSymbol({ "yoffset": 12, "type": "esriPMS", "url": "http://static.arcgis.com/images/Symbols/Basic/RedStickpin.png", "contentType": "image/png", "width": 24, "height": 24 });
+                            map.graphics.add(new Graphic(e.mapPoint, infoSymbol));
+                            var content = "The clicked location in<h3> <b>" + ward_name + "</b></h3> has a <h3><b>" + getCompetition(parseInt(e.graphic.attributes["ToBreak"])) + "</b></h3> and <h3><b>" + getPotential(parseInt(e.graphic.attributes[selectedAffordabilitylevel])) + "</b></h3> for starting a restaurant business in the affordability category :<h3> <b>" + selectedAffordabilityDesc + "</b></h3>";
+                            map.infoWindow.setContent(content);
+                            map.infoWindow.show(e.screenPoint);
+                        }
+                    });
+                    var query = new Query();
+                    query.where = "name = '" + ward_name + "'";
+                    driveTimeLayer.queryFeatures(query, function (response) {
+                        var features = response.features;
+                        for (var f = 0, fl = features.length; f < fl; f++) {
+                            var feature = features[f];
+                            feature.setSymbol(getSymbol4DriveTimePolygon(feature.attributes.ToBreak));
+                            map.graphics.add(feature);
+                        }
+                        function getSymbol4DriveTimePolygon(val) {
+                            var returnSymbol = new SimpleFillSymbol(SimpleFillSymbol.STYLE_SOLID, new SimpleLineSymbol(SimpleLineSymbol.STYLE_DASHDOT, new Color("#FF6200"), 2), getColor(val));
+                            function getColor(val) {
+                                if (val == 1) return (new Color([255, 0, 0, 0.2]));
+                                if (val == 3) return (new Color([255, 128, 0, 0.2]));
+                                if (val == 5) return (new Color([255, 255, 0, 0.2]));
+                                if (val == 7) return (new Color([139, 209, 0, 0.2]));
+                                if (val == 10) return (new Color([56, 168, 0, 0.2]));
+                                if (val == 0) return (new Color([56, 168, 0, 0.2]));
+                            }
+                            return returnSymbol;
+                        }
+                    });
+                    doLegend("show");
+                }
+                else {
+                    alert("Select a ward name!");
+                }
+            }
+            else {
+                alert("Select an affordability level");
+            }
+        }
+        function closeDiv() {
+            var elem = document.getElementById('chart_div');
+            elem.style.display = 'none';
+            closeDialog();
+            doLegend("hide");
+            map.setExtent(featureLayer.initialExtent);
+        }
+        dojo.connect(dojo.byId("btnSearhWard"), "onclick", function () {
+            var ward_name = document.getElementById('txtWards').value;
+            var datalist = document.getElementById("wardsList");
+            if (ward_name.length > 3) {
+                for (var i = 0; i < datalist.options.length; i++) {
+                    if (ward_name == datalist.options[i].value) {
+                        zoomToWard(ward_name);
+                    }
+                }
+            }
+        });
+        function zoomToWard(ward) {
+            closeDialog();
+            var query = new Query();
+            query.where = "name = '" + ward + "'";
+            featureLayer.queryFeatures(query, function (response) {
+                var features = response.features;
+                var attr = features[0].attributes;
+                selectedWardName = attr.name;
+                var potential_1 = attr.af_1;
+                var potential_2 = attr.af_2;
+                var potential_3 = attr.af_3;
+                var potential_4 = attr.af_4;
+                createChart(selectedWardName, potential_1, potential_2, potential_3, potential_4);
+                var highlightGraphic = new Graphic(features[0].geometry, highlightSymbol);
+                map.graphics.add(highlightGraphic);
+                map.setExtent(features[0].geometry.getExtent().expand(2));
+            });
+        }
+        function getColor(val) {
+            if (val <= 25) return "green";
+            else if (val <= 50) return "yellow";
+            else if (val <= 75) return "orange";
+            else return "red";
+        }
+        function getCompetition(val) {
+            if (val == 1) return "VERY HIGH COMPETITION (<1 min drive-time)";
+            else if (val == 3) return "HIGH COMPETITION (<3 min drive-time)";
+            else if (val == 5) return "MODERATE COMPETITION (<5 min drive-time)";
+            else if (val == 7) return "LOW COMPETITION (<7 min drive-time)";
+            else return "VERY LOW COMPETITION (>7 min drive-time)";
+        }
+        function getAnnotation(val) {
+            if (val <= 25) return (val.toString() + "%(Low)");
+            else if (val <= 50) return (val.toString() + "%(Medium)");
+            else if (val <= 75) return (val.toString() + "%(High)");
+            else return (val.toString() + "%(Very high)");
+        }
+        function getPotential(val) {
+            if (val <= 25) return "LOW POTENTIAL(" + val + "%)";
+            else if (val <= 50) return "MEDIUM POTENTIAL(" + val + "%)";
+            else if (val <= 75) return "HIGH POTENTIAL(" + val + "%)";
+            else return "VERY HIGH POTENTIAL(" + val + "%)";
+        }
+        function setDefaultSymbology2Map() {
+            //alert('Hi');
+            featureLayer.setRenderer(new SimpleRenderer(defaultSymbol));
+        }
+        //close the dialog when the mouse leaves the highlight graphic
+        function closeDialog() {
+            map.infoWindow.hide();
+            map.graphics.clear();
+            if (driveTimeLayer) {
+                map.removeLayer(driveTimeLayer);
+                isDriveTimeLyrOpen = false;
+            }
+            dijitPopup.close(dialog);
+        }
+        function doLegend(val) {
+            var legendElement = document.getElementById('legend_div');
+            if (val == "show") {
+                legendElement.style.display = 'block';
+            }
+            if (val == "hide") {
+                legendElement.style.display = 'none';
+            }
+        }
+        //Change the renderer based on change in affordability
+        dojo.connect(dojo.byId('#ddlType'), "onchange", function (evt) {
+            closeDialog();
+            doLegend("show");
+            var val = evt.target.value;
+            selectedAffordabilityLevel = val;
+            if (selectedAffordabilityLevel != "Select") {
+                var symbol = new SimpleFillSymbol();
+                symbol.setColor(new Color([150, 150, 150, 0.2]));
+                var renderer = new ClassBreaksRenderer(symbol, selectedAffordabilityLevel);
+                renderer.addBreak(0, 20, new SimpleFillSymbol().setColor(new Color([56, 168, 0, 0.2])));
+                renderer.addBreak(20, 40, new SimpleFillSymbol().setColor(new Color([139, 209, 0, 0.2])));
+                renderer.addBreak(40, 60, new SimpleFillSymbol().setColor(new Color([255, 255, 0, 0.2])));
+                renderer.addBreak(60, 80, new SimpleFillSymbol().setColor(new Color([255, 128, 0, 0.2])));
+                renderer.addBreak(80, 100, new SimpleFillSymbol().setColor(new Color([255, 0, 0, 0.2])));
+                featureLayer.setRenderer(renderer);
+            }
+            else //Set to default symbology
+            {
+                setDefaultSymbology2Map();
+            }
+            featureLayer.refresh();
+        });
+    });
+    /* function zoom2Ward4mChart()
+    {
+    alert(selectedWardName);
+    zoomToWard(selectedWardName);
+    } */
+</script>
+</head>
+<body class="claro" >
+<div id="map">
+<div id="info">
+<table><tr><td>SELECT AFFORDABILITY<br/>
+<select id="ddlType" width="75px">
+<option value="Select">Select</option>
+<option value="af_1">Low Cost</option>
+<option value="af_2">Moderate Cost</option>
+<option value="af_3">High Cost</option>
+<option value="af_4">Exquisite</option>
+</select>
+<br/>
+SELECT/TYPE WARD NAME<br/>
+<input type="text" width="75px" list="wardsList" id="txtWards" name="txtWards" title="Click the Zoom image to zoom to the ward"/>
+<datalist id="wardsList">
+<option value="Kodungaiyur(West)">
+<option value="Kodungaiyur (East)">
+<option value="Dr.Radhakrishnan Nagar (North)">
+<option value="Cheriyan Nagar (North)">
+<option value="Jeeva Nagar(North)">
+<option value="Cheriyan Nagar(South)">
+<option value="Jeeva Nagar (South)">
+<option value="Korukkupet">
+<option value="Mottai Thottam">
+<option value="Kumarasamy Nagar (South)">
+<option value="Dr.Radhakrishnan Nagar (South)">
+<option value="Kumarasamy Nagar (North)">
+<option value="Vijayaragavalu Nagar (West)">
+<option value="Tondiarpet">
+<option value="Sanjeevirayanpet">
+<option value="Grace Garden">
+<option value="Ma-Po-Si Nagar">
+<option value="Royapuram">
+<option value="Singarathottam">
+<option value="Narayanappa Thottam">
+<option value="Old Washermenpet">
+<option value="Meenakshiammanpet">
+<option value="Kondithope">
+<option value="Sevenwells (North)">
+<option value="Amman Koil">
+<option value="Muthialpet">
+<option value="Vallalseethakathi Nagar">
+<option value="Kachaleeswarar Nagar">
+<option value="Sevenwells (South)">
+<option value="Sowcarpet">
+<option value="Basin Bridge">
+<option value="Vyasarpet (South)">
+<option value="Vyasarpet (North)">
+<option value="Perambur (North)">
+<option value="Perambur (East)">
+<option value="Elango Nagar">
+<option value="Perambur (South)">
+<option value="Thiru-Vi-Ka Nagar">
+<option value="Wadia Nagar">
+<option value="Dr.Sathyavanimuthu Nagar">
+<option value="Pulianthope">
+<option value="Dr.Besant Nagar">
+<option value="Pedhunayakanpet">
+<option value="Perumal Koil Thottam">
+<option value="Thattankulam">
+<option value="Choolai">
+<option value="Poonga Nagar">
+<option value="Elephant Gate">
+<option value="Edapalayam">
+<option value="Agaram (North)">
+<option value="Sembiam">
+<option value="Siruvalloor">
+<option value="Nagammai Ammaiyar Nagar">
+<option value="Agaram (South)">
+<option value="Vidhudalai Gurusami Nagar">
+<option value="Ayanavaram">
+<option value="Nagammaiammaiyar Nagar (South)">
+<option value="Panneer Selvam Nagar">
+<option value="Maraimalai Adigal Nagar">
+<option value="Maraimalai Adigal Nagar (South)">
+<option value="Purasawalkam">
+<option value="Kolathur">
+<option value="Villiwakkam (North)">
+<option value="Villiwakkam (South)">
+<option value="Virugambakkam (North)">
+<option value="Anna Nagar (West)">
+<option value="Anna Nagar (Central)">
+<option value="Anna Nagar (East)">
+<option value="Shenoy Nagar">
+<option value="Kilpauk (North)">
+<option value="Gangadeeswarar Koil">
+<option value="Kilpauk (South)">
+<option value="Amanjikarai (North)">
+<option value="Amanjikarai (Central)">
+<option value="Amanjikarai (West)">
+<option value="Periyar Nagar (North)">
+<option value="Periyar Nagar (West)">
+<option value="Nungambakkam">
+<option value="Adikesavapuram">
+<option value="Nehru Nagar">
+<option value="Chintadripet">
+<option value="Komaleeswaranpet">
+<option value="Balasubramanya Nagar">
+<option value="Thiruvotteeswaranpet">
+<option value="Natesan Nagar">
+<option value="Chepauk">
+<option value="Zambazaar">
+<option value="Umaru Pulavar Nagar">
+<option value="Triplicane">
+<option value="Marina">
+<option value="Krishnampet">
+<option value="Bharathi Nagar">
+<option value="Azad Bgr (North)">
+<option value="Bharthidasan Nagar">
+<option value="Azas Nagar (South)">
+<option value="Vivekananda Puram">
+<option value="Ajnugam Ammaiyar Nagar">
+<option value="Kosappet W(G)">
+<option value="Pattalam - Sc(G)">
+<option value="Anbazhagan Nagar">
+<option value="Perumalpet">
+<option value="Kannappar Nagar W(G)">
+<option value="Pattalam">
+<option value="Chetpet">
+<option value="Egmore">
+<option value="Pudupet">
+<option value="Ko-Su-Mani Nagar">
+<option value="Nakeerar Nagar">
+<option value="Thousand Lights">
+<option value="Azhagiri Nagar">
+<option value="Amir Mahal">
+<option value="Royapettah">
+<option value="Teynampet">
+<option value="Sathyamurthy Nagar">
+<option value="Alwarpet (North)">
+<option value="Alwarpet (South)">
+<option value="Vadapalani (West)">
+<option value="Vadapalani (East)">
+<option value="Kalaivanar Nagar">
+<option value="Navalar Nedunchezian Nagar (West)">
+<option value="Navalar Nedunchezian Nagar (West)">
+<option value="Ashok Nagar">
+<option value="M.G.R. Nagar">
+<option value="Kamaraj Nagar (North)">
+<option value="Kamaraj Nagar (South)">
+<option value="Thyagaraya Nagar">
+<option value="Rajaji Nagar">
+<option value="Virugambakkam (South)">
+<option value="Saligarmam">
+<option value="Kodambakkam (North)">
+<option value="Kodambakkam (South)">
+<option value="Saidapet">
+<option value="Kumaran Nagar (North)">
+<option value="Kumaran Nagar (South)">
+<option value="Saidapet (West)">
+<option value="Kalaingar Karunanidhi Nagar">
+<option value="V O C Nagar">
+<option value="G D Naidu Nagar (East)">
+<option value="G. D Naidu Nagar (West)">
+<option value="Guindy (West)">
+<option value="Guindy (East)">
+<option value="Beemannapettai">
+<option value="Thiruvalluvar Nagar">
+<option value="Madavaperumal Puram">
+<option value="Karaneeswarpuram">
+<option value="Santhome">
+<option value="Mylapore">
+<option value="Avvai Nagar (South)">
+<option value="Raja Annamalai Puram">
+<option value="Avvai Nagar (South)">
+<option value="Adyar (West)">
+<option value="Adyar (East)">
+<option value="Velachery">
+<option value="Thiruvanmiyur (West)">
+<option value="Thiruvanmiyur (East)">
+</datalist>
+<input class="icon" type="image" src="http://www.standard-icons.com/stock-icons/standard-toolbar/zoom_in-icon.gif" title="Zoom to Ward" height="20px" width ="20px" id="btnSearhWard"/>
+<input class="icon" type="image" src="http://maps.dmgov.org/extmaps/com/esri/solutions/flexviewer/assets/images/icons/i_zoomfull.png" title="Zoom to Full Extent" height="20px" width ="20px" id="btnZoom2FullExtent" />
+</td>
+<td class="myTd" width="45%">ANALYZE COMPETITION<hr>
+<input class="icon" type="image" src="http://www.pandiyarajan.com/blog/wp-content/uploads/2013/01/keyword-research-tools-300x203.jpg" title="Analyse competition by overlaying Drive Time Polygons" height="80px" width ="100px" id="btnOverlaySA"/>
+</td>
+</tr>
+</table></div>
+<div id="legend_div" style="display: none;">
+<img src="http://s3-us-west-2.amazonaws.com/jayakrishnan.consultation.projects/Potential.png" width ="450px" id="imgPotentialLegend" />
+<hr>
+<img src="http://s3-us-west-2.amazonaws.com/jayakrishnan.consultation.projects/Competition.png" width ="450px" id="imgCompetitionLegend" />
+</div>
+<div id="chart_div" style="display: none;">
+<input class="icon" type="image" src="http://icons.iconarchive.com/icons/hopstarter/plastic-mini/32/Button-Close-icon.png" title="Close chart and Zoom to Full Extent" height="20px" width ="20px" id="btnClose" />
+<hr><div id="chart_space"></div>
+</div>
+</div>
+</body>
+</html>
