@@ -1,7 +1,7 @@
 ###JavaScript
 ==========
 ##Restaurant GIS Analytics
-####Find the application at:
+**Find the application at:**
 **http://s3-us-west-2.amazonaws.com/jayakrishnan.consultation.projects/index.html**
 
 - Maps the potential for starting a new restaurant in Chennai based on wardwise data
