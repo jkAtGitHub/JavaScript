@@ -1,10 +1,7 @@
-define([ "dojo/_base/declare","esri/lang","app/clsContainer"],function(declare,esriLang, Container)
+define([ "esri/lang"],function(esriLang)
 {
 return  {
     
-    contructor: function()
-    {
-    },
         getColor: function(val){
            if (val <= 25) return "green";
             else if (val <= 50) return "yellow";
@@ -14,10 +11,10 @@ return  {
  
         getCompetition: function(val){
             val = parseInt(val);
-           if (val == 1) return "VERY HIGH COMPETITION (<1 min drive-time)";
-            else if (val == 3) return "HIGH COMPETITION (<3 min drive-time)";
-            else if (val == 5) return "MODERATE COMPETITION (<5 min drive-time)";
-            else if (val == 7) return "LOW COMPETITION (<7 min drive-time)";
+           if (val === 1) return "VERY HIGH COMPETITION (<1 min drive-time)";
+            else if (val === 3) return "HIGH COMPETITION (<3 min drive-time)";
+            else if (val === 5) return "MODERATE COMPETITION (<5 min drive-time)";
+            else if (val === 7) return "LOW COMPETITION (<7 min drive-time)";
             else return "VERY LOW COMPETITION (>7 min drive-time)";
         },
  
