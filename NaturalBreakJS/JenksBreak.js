@@ -36,7 +36,6 @@ define(["dojo/_base/declare"],
         }
     }
 
-
     for (var i = 1; i < noOfBreaks + 1; i++) {
 
         mat1[1, i] = 1;
