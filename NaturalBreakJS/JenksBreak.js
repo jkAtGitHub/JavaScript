@@ -1,8 +1,15 @@
-A = [347, 844, 1296, 2115, 3254, 3363, 3591, 9271, 9957, 10655, 17331, 18471, 19992, 20614, 21252, 25281, 25946, 27264, 29521, 29882, 31147, 35592, 39776, 41505, 44328, 46979, 56821, 61685, 62679, 63689, 78050, 83886];
+define(["dojo/_base/declare"],
+    function (declare) {
+        return declare(null, {
+            mapServiceURL: null,
+            
 
-getJenksBreaks(A, 4);
 
-function getJenksBreaks(listOfValues, noOfBreaks) {
+            constructor: function (options) {
+                // specify class defaults
+                },
+
+            getJenksBreaks: function (listOfValues, noOfBreaks) {
     var breakValues = [];
     var mat1 = [];
     var mat2 = [];
@@ -40,11 +47,16 @@ function getJenksBreaks(listOfValues, noOfBreaks) {
             mat2[j, i] = Infinity;
         }
     }
-    var str = '';
-    mat2.foreach(function(row){str += row.join(' ');});
-    alert(str);
+    
+}
+        });
+    }
+);
+A = [347, 844, 1296, 2115, 3254, 3363, 3591, 9271, 9957, 10655, 17331, 18471, 19992, 20614, 21252, 25281, 25946, 27264, 29521, 29882, 31147, 35592, 39776, 41505, 44328, 46979, 56821, 61685, 62679, 63689, 78050, 83886];
 
-} */
+getJenksBreaks(A, 4);
+
+ */
 
 /*
 
